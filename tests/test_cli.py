@@ -78,3 +78,16 @@ def test_open_room_requires_manual_open_when_not_found(monkeypatch):
     monkeypatch.setattr(backend, "list_rooms", lambda: [])
     with pytest.raises(KakaoError, match="직접 독립 창으로"):
         backend.open_room("개발팀", exact=True)
+
+
+def test_set_text_falls_back_to_replace_selection(monkeypatch):
+    state = {"text": ""}
+
+    def send_message(_hwnd, message, _wparam, lparam):
+        if message == backend.win32con.EM_REPLACESEL:
+            state["text"] = lparam
+
+    monkeypatch.setattr(backend.win32gui, "SendMessage", send_message)
+    monkeypatch.setattr(backend.win32gui, "GetWindowText", lambda _hwnd: state["text"])
+    assert backend._set_text(1, "테스트") is True
+    assert state["text"] == "테스트"

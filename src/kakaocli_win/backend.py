@@ -162,7 +162,76 @@ def _press(vk: int, modifiers: tuple[int, ...] = ()) -> None:
 
 def _set_text(hwnd: int, text: str) -> bool:
     win32gui.SendMessage(hwnd, win32con.WM_SETTEXT, 0, text)
-    return win32gui.GetWindowText(hwnd) == text
+    if win32gui.GetWindowText(hwnd) == text:
+        return True
+
+    # Recent KakaoTalk RichEdit controls can reject WM_SETTEXT while still
+    # accepting the normal RichEdit replace-selection operation.
+    win32gui.SendMessage(hwnd, win32con.EM_SETSEL, 0, -1)
+    win32gui.SendMessage(hwnd, win32con.EM_REPLACESEL, True, text)
+    if win32gui.GetWindowText(hwnd) == text:
+        return True
+
+    _focus(hwnd)
+    _press(ord("A"), (win32con.VK_CONTROL,))
+    # KakaoTalk intentionally returns an empty value for this control even
+    # while typed text is visibly present. SendInput's accepted-event count is
+    # therefore the only programmatic confirmation available before Enter.
+    return _send_unicode_input(text)
+
+
+def _send_unicode_input(text: str) -> bool:
+    """Type Unicode text through SendInput without touching the clipboard."""
+    ulong_ptr = ctypes.c_ulonglong if ctypes.sizeof(ctypes.c_void_p) == 8 else ctypes.c_ulong
+
+    class KeyboardInput(ctypes.Structure):
+        _fields_ = [
+            ("wVk", ctypes.c_ushort),
+            ("wScan", ctypes.c_ushort),
+            ("dwFlags", ctypes.c_ulong),
+            ("time", ctypes.c_ulong),
+            ("dwExtraInfo", ulong_ptr),
+        ]
+
+    class MouseInput(ctypes.Structure):
+        _fields_ = [
+            ("dx", ctypes.c_long),
+            ("dy", ctypes.c_long),
+            ("mouseData", ctypes.c_ulong),
+            ("dwFlags", ctypes.c_ulong),
+            ("time", ctypes.c_ulong),
+            ("dwExtraInfo", ulong_ptr),
+        ]
+
+    class HardwareInput(ctypes.Structure):
+        _fields_ = [
+            ("uMsg", ctypes.c_ulong),
+            ("wParamL", ctypes.c_ushort),
+            ("wParamH", ctypes.c_ushort),
+        ]
+
+    class InputUnion(ctypes.Union):
+        _fields_ = [
+            ("ki", KeyboardInput),
+            ("mi", MouseInput),
+            ("hi", HardwareInput),
+        ]
+
+    class Input(ctypes.Structure):
+        _anonymous_ = ("union",)
+        _fields_ = [("type", ctypes.c_ulong), ("union", InputUnion)]
+
+    key_events = []
+    encoded = text.encode("utf-16-le")
+    for offset in range(0, len(encoded), 2):
+        unit = int.from_bytes(encoded[offset : offset + 2], "little")
+        key_events.append(Input(1, InputUnion(ki=KeyboardInput(0, unit, 0x0004, 0, 0))))
+        key_events.append(Input(1, InputUnion(ki=KeyboardInput(0, unit, 0x0006, 0, 0))))
+    if not key_events:
+        return True
+    inputs = (Input * len(key_events))(*key_events)
+    sent = ctypes.windll.user32.SendInput(len(inputs), inputs, ctypes.sizeof(Input))
+    return sent == len(inputs)
 
 
 def open_room(room: str, *, exact: bool = False, timeout: float = 3.0) -> WindowInfo:
