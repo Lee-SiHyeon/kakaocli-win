@@ -24,6 +24,13 @@ def test_inspect_room_argument():
     assert args.room == "테스트방"
 
 
+def test_friends_filter_arguments():
+    args = build_parser().parse_args(["--json", "friends", "--contains", "vs"])
+    assert args.command == "friends"
+    assert args.contains == "vs"
+    assert args.include_hidden is False
+
+
 def make_window(title: str, hwnd: int) -> WindowInfo:
     return WindowInfo(hwnd, title, backend.CHAT_CLASS, 380, 640, True, "chat")
 

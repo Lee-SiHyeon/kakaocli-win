@@ -68,6 +68,13 @@ def build_parser() -> argparse.ArgumentParser:
     recover_parser.add_argument("--timeout", type=float, default=120.0, help="검색 제한 시간(초)")
     recover_parser.add_argument("--no-store", action="store_true", help="검증만 하고 DPAPI 저장하지 않음")
     sub.add_parser("key-status", help="DPAPI 키 저장소 상태 확인")
+
+    friends_parser = sub.add_parser("friends", help="로컬 DB에서 친구 목록 조회")
+    friends_parser.add_argument("--contains", help="표시 이름에 포함된 문자열")
+    friends_parser.add_argument("--include-hidden", action="store_true", help="숨김 친구 포함")
+
+    schema_parser = sub.add_parser("db-schema", help="복호화된 DB의 테이블 구조만 조회")
+    schema_parser.add_argument("--db", help="대상 .edb 경로; 생략 시 TalkUserDB.edb")
     return parser
 
 
@@ -119,6 +126,26 @@ def main(argv: list[str] | None = None) -> int:
             from .key_recovery import key_store_status
 
             result = key_store_status()
+        elif args.command == "friends":
+            from .db_reader import read_friends
+            from .key_recovery import default_database, load_stored_key
+
+            database = default_database()
+            friends = read_friends(
+                database,
+                load_stored_key(database),
+                contains=args.contains,
+                include_hidden=args.include_hidden,
+            )
+            result = friends if args.json else [friend["name"] for friend in friends]
+        elif args.command == "db-schema":
+            from pathlib import Path
+
+            from .db_reader import read_schema
+            from .key_recovery import default_database, load_stored_key
+
+            database = Path(args.db).resolve() if args.db else default_database()
+            result = read_schema(database, load_stored_key(database))
         elif args.command == "send":
             preview = {"room": args.room, "message": args.message, "exact": args.exact}
             if args.dry_run:

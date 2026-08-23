@@ -13,6 +13,7 @@ Windows 10/11용 비공식 카카오톡 CLI입니다. 카카오 공식 API나 �
 - 카카오톡 업데이트 호환성 진단용 컨트롤 트리 출력
 - 실행 중인 `KakaoTalk.exe` 메모리에서 SQLCipher 4 raw key 후보 복구
 - 검증된 키를 Windows DPAPI로 보호해 로컬 저장
+- 저장된 키로 `TalkUserDB.edb`를 임시 복호화해 친구 목록 조회
 
 읽기는 카카오톡 화면에 현재 로드된 범위만 대상으로 하며, 전체 채팅 기록이나 로컬 DB를 읽지 않습니다. 카카오톡 UI가 변경되면 `inspect` 결과를 바탕으로 선택자를 조정해야 할 수 있습니다.
 
@@ -76,6 +77,15 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 # 키 원문 없이 저장 상태와 지문 확인
 .\kakaocli.cmd --json key-status
+
+# GUI 자동화 없이 친구 DB 검색
+.\kakaocli.cmd friends --contains "vs"
+
+# 자동화용 JSON
+.\kakaocli.cmd --json friends --contains "vs"
+
+# 데이터 행을 노출하지 않고 DB 테이블·열·행 수만 확인
+.\kakaocli.cmd --json db-schema
 ```
 
 동일한 문자열이 들어간 방이 여러 개면 전송을 중단합니다. 자동화에서는 완전한 채팅방 이름과 `--exact` 사용을 권장합니다.
@@ -111,6 +121,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 - DB 원본과 카카오톡 프로세스 메모리를 수정하지 않습니다.
 - 키 원문은 콘솔이나 JSON에 출력하지 않습니다.
 - 검증 키는 `%LOCALAPPDATA%\kakaocli-win\keys.json`에 DPAPI 암호문으로 저장되어 같은 Windows 사용자만 해제할 수 있습니다.
+- DB 조회 시 평문 SQLite 파일은 Windows 임시 폴더에 만들고 조회 종료 시 즉시 삭제합니다.
 - DB가 실제로 사용되는 화면을 최근에 열지 않았다면 키가 메모리에 없을 수 있습니다. 이 경우 해당 화면을 연 뒤 다시 실행하세요.
 - 다른 사람의 PC, 계정 또는 접근 권한이 없는 데이터에는 사용하지 마세요.
 
