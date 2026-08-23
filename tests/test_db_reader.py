@@ -2,9 +2,11 @@ import hashlib
 import hmac
 import os
 import struct
+from contextlib import contextmanager
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
+import kakaocli_win.db_reader as db_reader
 from kakaocli_win.db_reader import SQLITE_HEADER, decrypt_sqlcipher4
 from kakaocli_win.key_recovery import (
     FILE_HEADER_SIZE,
@@ -45,3 +47,39 @@ def test_decrypt_sqlcipher4_page(tmp_path):
     result = destination.read_bytes()
     assert result[: PAGE_SIZE - RESERVE_SIZE] == plaintext[: PAGE_SIZE - RESERVE_SIZE]
     assert result[PAGE_SIZE - RESERVE_SIZE :] == bytes(RESERVE_SIZE)
+
+
+def test_read_chat_rooms_filters_and_omits_ids_by_default(tmp_path, monkeypatch):
+    database = tmp_path / "rooms.sqlite"
+    connection = db_reader.sqlite3.connect(database)
+    connection.execute(
+        "CREATE TABLE chatRoomList (chatId INTEGER, type TEXT, chatRoomTitle TEXT, "
+        "activeMembersCount INTEGER, newMessageCount INTEGER, lastUpdatedAt INTEGER)"
+    )
+    connection.executemany(
+        "INSERT INTO chatRoomList VALUES (?, ?, ?, ?, ?, ?)",
+        [
+            (1, "MultiChat", "바다 모임", 3, 1, 20),
+            (2, "DirectChat", "친구", 2, 0, 10),
+        ],
+    )
+    connection.commit()
+    connection.close()
+
+    @contextmanager
+    def passthrough(_database, _key):
+        yield database
+
+    monkeypatch.setattr(db_reader, "temporary_plaintext_database", passthrough)
+    rooms = db_reader.read_chat_rooms(
+        database, b"x" * 32, contains="바다", room_type="multichat"
+    )
+    assert rooms == [
+        {
+            "title": "바다 모임",
+            "type": "MultiChat",
+            "members": 3,
+            "unread": 1,
+            "lastUpdatedAt": 20,
+        }
+    ]

@@ -323,6 +323,15 @@ def default_database() -> Path:
     return max(candidates, key=lambda path: path.stat().st_mtime)
 
 
+def default_chat_list_database() -> Path:
+    """Return chatListInfo.edb belonging to the newest local Kakao profile."""
+    user_database = default_database()
+    database = user_database.parent / "chat_data" / "chatListInfo.edb"
+    if not database.is_file():
+        raise KakaoError("chatListInfo.edb를 찾지 못했습니다.")
+    return database
+
+
 def _key_store_path() -> Path:
     return Path(os.environ["LOCALAPPDATA"]) / "kakaocli-win" / "keys.json"
 

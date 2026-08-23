@@ -14,8 +14,9 @@ Windows 10/11용 비공식 카카오톡 CLI입니다. 카카오 공식 API나 �
 - 실행 중인 `KakaoTalk.exe` 메모리에서 SQLCipher 4 raw key 후보 복구
 - 검증된 키를 Windows DPAPI로 보호해 로컬 저장
 - 저장된 키로 `TalkUserDB.edb`를 임시 복호화해 친구 목록 조회
+- 저장된 별도 키로 `chatListInfo.edb`의 채팅방 메타데이터 조회(메시지 본문 제외)
 
-읽기는 카카오톡 화면에 현재 로드된 범위만 대상으로 하며, 전체 채팅 기록이나 로컬 DB를 읽지 않습니다. 카카오톡 UI가 변경되면 `inspect` 결과를 바탕으로 선택자를 조정해야 할 수 있습니다.
+`read`는 카카오톡 화면에 현재 로드된 대화만 대상으로 합니다. `friends`와 `chat-rooms`는 각각 친구 및 채팅방 메타데이터 DB를 읽지만, 메시지 본문은 읽지 않습니다. 카카오톡 UI가 변경되면 `inspect` 결과를 바탕으로 선택자를 조정해야 할 수 있습니다.
 
 ## 설치
 
@@ -83,6 +84,12 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 # 자동화용 JSON
 .\kakaocli.cmd --json friends --contains "vs"
+
+# GUI 자동화 없이 DB에서 채팅방 제목 검색
+.\kakaocli.cmd chat-rooms --contains "바다"
+
+# 종류·개수 필터와 메타데이터 JSON 출력
+.\kakaocli.cmd --json chat-rooms --type MultiChat --limit 20
 
 # 데이터 행을 노출하지 않고 DB 테이블·열·행 수만 확인
 .\kakaocli.cmd --json db-schema

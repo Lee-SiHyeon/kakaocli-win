@@ -73,6 +73,16 @@ def build_parser() -> argparse.ArgumentParser:
     friends_parser.add_argument("--contains", help="표시 이름에 포함된 문자열")
     friends_parser.add_argument("--include-hidden", action="store_true", help="숨김 친구 포함")
 
+    chat_rooms_parser = sub.add_parser(
+        "chat-rooms", help="로컬 DB에서 채팅방 목록 조회(메시지 본문 제외)"
+    )
+    chat_rooms_parser.add_argument("--contains", help="방 제목에 포함된 문자열")
+    chat_rooms_parser.add_argument("--type", dest="room_type", help="방 종류(예: MultiChat)")
+    chat_rooms_parser.add_argument("--limit", type=int, help="최대 출력 개수")
+    chat_rooms_parser.add_argument(
+        "--include-ids", action="store_true", help="JSON 출력에 로컬 chatId 포함"
+    )
+
     schema_parser = sub.add_parser("db-schema", help="복호화된 DB의 테이블 구조만 조회")
     schema_parser.add_argument("--db", help="대상 .edb 경로; 생략 시 TalkUserDB.edb")
     return parser
@@ -138,6 +148,23 @@ def main(argv: list[str] | None = None) -> int:
                 include_hidden=args.include_hidden,
             )
             result = friends if args.json else [friend["name"] for friend in friends]
+        elif args.command == "chat-rooms":
+            from .db_reader import read_chat_rooms
+            from .key_recovery import (
+                default_chat_list_database,
+                load_stored_key,
+            )
+
+            database = default_chat_list_database()
+            rooms = read_chat_rooms(
+                database,
+                load_stored_key(database),
+                contains=args.contains,
+                room_type=args.room_type,
+                limit=args.limit,
+                include_ids=args.include_ids,
+            )
+            result = rooms if args.json else [room["title"] for room in rooms]
         elif args.command == "db-schema":
             from pathlib import Path
 

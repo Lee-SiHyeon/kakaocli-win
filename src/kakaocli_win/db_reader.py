@@ -189,3 +189,54 @@ def read_friends(
             ]
         finally:
             connection.close()
+
+
+def read_chat_rooms(
+    database: Path,
+    key: bytes,
+    *,
+    contains: str | None = None,
+    room_type: str | None = None,
+    limit: int | None = None,
+    include_ids: bool = False,
+) -> list[dict]:
+    """Read room metadata from chatListInfo without reading message bodies."""
+    if limit is not None and limit < 1:
+        raise KakaoError("--limit은 1 이상이어야 합니다.")
+
+    with temporary_plaintext_database(database, key) as plaintext:
+        connection = sqlite3.connect(
+            f"file:{plaintext}?mode=ro&immutable=1", uri=True
+        )
+        try:
+            rows = connection.execute(
+                "SELECT chatId, type, chatRoomTitle, activeMembersCount, "
+                "newMessageCount, lastUpdatedAt "
+                "FROM chatRoomList ORDER BY lastUpdatedAt DESC"
+            ).fetchall()
+
+            needle = contains.casefold() if contains else None
+            expected_type = room_type.casefold() if room_type else None
+            result: list[dict] = []
+            for chat_id, kind, title, members, unread, updated_at in rows:
+                title = title or ""
+                kind = kind or ""
+                if needle and needle not in title.casefold():
+                    continue
+                if expected_type and kind.casefold() != expected_type:
+                    continue
+                item = {
+                    "title": title,
+                    "type": kind,
+                    "members": int(members or 0),
+                    "unread": int(unread or 0),
+                    "lastUpdatedAt": updated_at,
+                }
+                if include_ids:
+                    item["chatId"] = chat_id
+                result.append(item)
+                if limit is not None and len(result) >= limit:
+                    break
+            return result
+        finally:
+            connection.close()

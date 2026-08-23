@@ -31,6 +31,17 @@ def test_friends_filter_arguments():
     assert args.include_hidden is False
 
 
+def test_chat_rooms_filter_arguments():
+    args = build_parser().parse_args(
+        ["--json", "chat-rooms", "--contains", "바다", "--type", "MultiChat", "--limit", "5"]
+    )
+    assert args.command == "chat-rooms"
+    assert args.contains == "바다"
+    assert args.room_type == "MultiChat"
+    assert args.limit == 5
+    assert args.include_ids is False
+
+
 def make_window(title: str, hwnd: int) -> WindowInfo:
     return WindowInfo(hwnd, title, backend.CHAT_CLASS, 380, 640, True, "chat")
 
