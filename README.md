@@ -91,6 +91,12 @@ Set-ExecutionPolicy -Scope Process Bypass
 # 종류·개수 필터와 메타데이터 JSON 출력
 .\kakaocli.cmd --json chat-rooms --type MultiChat --limit 20
 
+# DB에서 나와의 채팅(MemoChat)을 식별한 뒤 전송 전 점검
+.\kakaocli.cmd --json send-self "나에게 남길 메모" --dry-run
+
+# 확인 질문을 거쳐 나와의 채팅으로 전송
+.\kakaocli.cmd send-self "나에게 남길 메모"
+
 # 데이터 행을 노출하지 않고 DB 테이블·열·행 수만 확인
 .\kakaocli.cmd --json db-schema
 ```

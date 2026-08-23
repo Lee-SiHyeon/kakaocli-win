@@ -32,6 +32,13 @@ def emit(data: Any, *, as_json: bool) -> None:
             print(f"{key}: {value}")
 
 
+def confirm_send(room: str, message: str, *, skip: bool) -> bool:
+    if skip:
+        return True
+    print(f"전송 대상: {room}\n메시지: {message}", file=sys.stderr)
+    return input("이대로 전송할까요? [y/N] ").strip().casefold() in {"y", "yes"}
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="kakaocli", description="비공식 Windows 카카오톡 CLI")
     parser.add_argument("--json", action="store_true", help="JSON으로 출력")
@@ -57,6 +64,15 @@ def build_parser() -> argparse.ArgumentParser:
     send_parser.add_argument("--exact", action="store_true")
     send_parser.add_argument("--yes", action="store_true", help="확인 질문 생략")
     send_parser.add_argument("--dry-run", action="store_true", help="대상과 내용을 출력하고 전송하지 않음")
+
+    send_self_parser = sub.add_parser(
+        "send-self", help="DB에서 나와의 채팅을 찾아 메시지 전송"
+    )
+    send_self_parser.add_argument("message")
+    send_self_parser.add_argument("--yes", action="store_true", help="확인 질문 생략")
+    send_self_parser.add_argument(
+        "--dry-run", action="store_true", help="대상과 내용을 출력하고 전송하지 않음"
+    )
 
     inspect_parser = sub.add_parser("inspect", help="호환성 진단용 자식 컨트롤 출력")
     inspect_parser.add_argument("--room", help="채팅방 창 검사; 생략 시 메인 창 검사")
@@ -173,17 +189,37 @@ def main(argv: list[str] | None = None) -> int:
 
             database = Path(args.db).resolve() if args.db else default_database()
             result = read_schema(database, load_stored_key(database))
+        elif args.command == "send-self":
+            from .db_reader import read_chat_rooms
+            from .key_recovery import default_chat_list_database, load_stored_key
+
+            database = default_chat_list_database()
+            memo_rooms = read_chat_rooms(
+                database,
+                load_stored_key(database),
+                room_type="MemoChat",
+                limit=2,
+            )
+            if len(memo_rooms) != 1 or not memo_rooms[0]["title"]:
+                raise KakaoError("나와의 채팅방을 하나로 식별하지 못했습니다.")
+            room = memo_rooms[0]["title"]
+            preview = {"room": room, "message": args.message, "exact": True}
+            if args.dry_run:
+                result = {"sent": False, "dry_run": True, **preview}
+            else:
+                if not confirm_send(room, args.message, skip=args.yes):
+                    emit({"sent": False, "cancelled": True}, as_json=args.json)
+                    return 2
+                window = send_message(room, args.message, exact=True)
+                result = {"sent": True, "room": window.title, "message": args.message}
         elif args.command == "send":
             preview = {"room": args.room, "message": args.message, "exact": args.exact}
             if args.dry_run:
                 result = {"sent": False, "dry_run": True, **preview}
             else:
-                if not args.yes:
-                    print(f"전송 대상: {args.room}\n메시지: {args.message}", file=sys.stderr)
-                    answer = input("이대로 전송할까요? [y/N] ").strip().casefold()
-                    if answer not in {"y", "yes"}:
-                        emit({"sent": False, "cancelled": True}, as_json=args.json)
-                        return 2
+                if not confirm_send(args.room, args.message, skip=args.yes):
+                    emit({"sent": False, "cancelled": True}, as_json=args.json)
+                    return 2
                 window = send_message(args.room, args.message, exact=args.exact)
                 result = {"sent": True, "room": window.title, "message": args.message}
         else:

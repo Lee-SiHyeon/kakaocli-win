@@ -19,6 +19,14 @@ def test_send_requires_message():
         build_parser().parse_args(["send", "친구"])
 
 
+def test_send_self_dry_run_arguments():
+    args = build_parser().parse_args(["--json", "send-self", "메모", "--dry-run"])
+    assert args.command == "send-self"
+    assert args.message == "메모"
+    assert args.dry_run is True
+    assert args.yes is False
+
+
 def test_inspect_room_argument():
     args = build_parser().parse_args(["inspect", "--room", "테스트방"])
     assert args.room == "테스트방"
