@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import sys
+from pathlib import Path
 from typing import Any
 
 from . import __version__
@@ -99,6 +101,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--include-ids", action="store_true", help="JSON 출력에 로컬 chatId 포함"
     )
 
+    contacts_parser = sub.add_parser(
+        "export-room-contacts",
+        help="DB에 캐시된 채팅방 참여자 이름과 연락처를 CSV로 저장",
+    )
+    contacts_parser.add_argument("room", help="채팅방 제목")
+    contacts_parser.add_argument("--output", required=True, help="저장할 CSV 경로")
+    contacts_parser.add_argument("--exact", action="store_true", help="방 제목 완전 일치")
+    contacts_parser.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help="참여자 캐시가 불완전해도 부분 목록 저장",
+    )
+
     schema_parser = sub.add_parser("db-schema", help="복호화된 DB의 테이블 구조만 조회")
     schema_parser.add_argument("--db", help="대상 .edb 경로; 생략 시 TalkUserDB.edb")
     return parser
@@ -124,8 +139,6 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "inspect":
             result = inspect_tree(args.room)
         elif args.command == "recover-key":
-            from pathlib import Path
-
             from .key_recovery import (
                 default_database,
                 recover_key_from_process,
@@ -181,9 +194,56 @@ def main(argv: list[str] | None = None) -> int:
                 include_ids=args.include_ids,
             )
             result = rooms if args.json else [room["title"] for room in rooms]
-        elif args.command == "db-schema":
-            from pathlib import Path
+        elif args.command == "export-room-contacts":
+            from .db_reader import read_room_contacts
+            from .key_recovery import (
+                default_chat_list_database,
+                default_database,
+                load_stored_key,
+            )
 
+            chat_database = default_chat_list_database()
+            user_database = default_database()
+            export = read_room_contacts(
+                chat_database,
+                load_stored_key(chat_database),
+                user_database,
+                load_stored_key(user_database),
+                args.room,
+                exact=args.exact,
+            )
+            if not export["complete"] and not args.allow_partial:
+                raise KakaoError(
+                    "참여자 캐시가 불완전합니다: "
+                    f"방 표시 {export['expectedMembers']}명, 캐시 {export['cachedMembers']}명. "
+                    "부분 저장을 원하면 --allow-partial을 사용하세요."
+                )
+            destination = Path(args.output).expanduser().resolve()
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            temporary = destination.with_suffix(destination.suffix + ".tmp")
+            try:
+                with temporary.open("w", encoding="utf-8-sig", newline="") as handle:
+                    writer = csv.writer(handle)
+                    writer.writerow(["이름", "전화번호"])
+                    writer.writerows(
+                        (contact["name"], contact["phone"])
+                        for contact in export["contacts"]
+                    )
+                temporary.replace(destination)
+            finally:
+                temporary.unlink(missing_ok=True)
+            result = {
+                "saved": True,
+                "output": str(destination),
+                "room": export["room"],
+                "expectedMembers": export["expectedMembers"],
+                "exportedMembers": export["cachedMembers"],
+                "phoneNumbers": sum(
+                    bool(contact["phone"]) for contact in export["contacts"]
+                ),
+                "complete": export["complete"],
+            }
+        elif args.command == "db-schema":
             from .db_reader import read_schema
             from .key_recovery import default_database, load_stored_key
 

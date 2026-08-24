@@ -91,6 +91,12 @@ Set-ExecutionPolicy -Scope Process Bypass
 # 종류·개수 필터와 메타데이터 JSON 출력
 .\kakaocli.cmd --json chat-rooms --type MultiChat --limit 20
 
+# DB에 캐시된 참여자 이름·전화번호를 로컬 CSV로 저장
+.\kakaocli.cmd --json export-room-contacts "모임방" --exact --output ".\contacts.csv"
+
+# 방 표시 인원보다 캐시가 적다는 경고를 확인한 뒤 부분 목록 저장
+.\kakaocli.cmd export-room-contacts "모임방" --exact --output ".\contacts.csv" --allow-partial
+
 # DB에서 나와의 채팅(MemoChat)을 식별한 뒤 전송 전 점검
 .\kakaocli.cmd --json send-self "나에게 남길 메모" --dry-run
 
@@ -125,6 +131,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 - `read` 명령은 대화 내용을 복사하므로 실행 후 Windows 클립보드가 해당 텍스트로 바뀝니다.
 - UI 자동화 특성상 전송 후 실제 채팅창에서 결과를 확인하는 것이 좋습니다.
 - 저장소에는 실제 카카오톡 DB, 대화 내용, 방 이름, 복구 키 또는 로컬 진단 결과를 커밋하지 마세요.
+- 연락처 CSV에는 제3자의 개인정보가 포함될 수 있으므로 저장·공유·삭제를 직접 관리하세요. CLI는 연락처 CSV를 GitHub로 업로드하지 않습니다.
 
 ### DB 키 복구 안전성
 

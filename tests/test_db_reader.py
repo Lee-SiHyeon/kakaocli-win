@@ -83,3 +83,52 @@ def test_read_chat_rooms_filters_and_omits_ids_by_default(tmp_path, monkeypatch)
             "lastUpdatedAt": 20,
         }
     ]
+
+
+def test_read_room_contacts_joins_cached_members(tmp_path, monkeypatch):
+    chat_database = tmp_path / "chat.sqlite"
+    chat = db_reader.sqlite3.connect(chat_database)
+    chat.execute(
+        "CREATE TABLE chatRoomList "
+        "(chatId INTEGER, chatRoomTitle TEXT, activeMembersCount INTEGER)"
+    )
+    chat.execute(
+        "CREATE TABLE chatMembers (chatId INTEGER, userId INTEGER, isActive INTEGER)"
+    )
+    chat.execute("INSERT INTO chatRoomList VALUES (7, '모임방', 2)")
+    chat.executemany("INSERT INTO chatMembers VALUES (7, ?, 1)", [(10,), (20,)])
+    chat.commit()
+    chat.close()
+
+    user_database = tmp_path / "users.sqlite"
+    users = db_reader.sqlite3.connect(user_database)
+    users.execute(
+        "CREATE TABLE talkUser "
+        "(userId INTEGER, friendNickName TEXT, nickName TEXT, phoneNumber TEXT)"
+    )
+    users.executemany(
+        "INSERT INTO talkUser VALUES (?, ?, ?, ?)",
+        [(10, "친구 A", "A", "01011112222"), (20, "", "친구 B", "")],
+    )
+    users.commit()
+    users.close()
+
+    @contextmanager
+    def passthrough(database, _key):
+        yield database
+
+    monkeypatch.setattr(db_reader, "temporary_plaintext_database", passthrough)
+    result = db_reader.read_room_contacts(
+        chat_database,
+        b"c" * 32,
+        user_database,
+        b"u" * 32,
+        "모임방",
+        exact=True,
+    )
+    assert result["complete"] is True
+    assert result["cachedMembers"] == 2
+    assert result["contacts"] == [
+        {"name": "친구 A", "phone": "01011112222"},
+        {"name": "친구 B", "phone": ""},
+    ]

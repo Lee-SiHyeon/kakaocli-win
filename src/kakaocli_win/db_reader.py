@@ -240,3 +240,87 @@ def read_chat_rooms(
             return result
         finally:
             connection.close()
+
+
+def read_room_contacts(
+    chat_database: Path,
+    chat_key: bytes,
+    user_database: Path,
+    user_key: bytes,
+    room: str,
+    *,
+    exact: bool = False,
+) -> dict:
+    """Join cached active room members with locally stored contact data."""
+    needle = room.casefold().strip()
+    with temporary_plaintext_database(chat_database, chat_key) as chat_plaintext:
+        with temporary_plaintext_database(user_database, user_key) as user_plaintext:
+            chat_connection = sqlite3.connect(
+                f"file:{chat_plaintext}?mode=ro&immutable=1", uri=True
+            )
+            user_connection = sqlite3.connect(
+                f"file:{user_plaintext}?mode=ro&immutable=1", uri=True
+            )
+            try:
+                rooms = chat_connection.execute(
+                    "SELECT chatId, chatRoomTitle, activeMembersCount "
+                    "FROM chatRoomList"
+                ).fetchall()
+                matches = [
+                    item
+                    for item in rooms
+                    if (
+                        item[1]
+                        and (
+                            item[1].casefold().strip() == needle
+                            if exact
+                            else needle in item[1].casefold()
+                        )
+                    )
+                ]
+                if not matches:
+                    raise KakaoError(f"채팅방을 찾지 못했습니다: {room!r}")
+                if len(matches) > 1:
+                    titles = ", ".join(repr(item[1]) for item in matches)
+                    raise KakaoError(
+                        f"채팅방 이름이 여러 개와 일치합니다: {titles}. --exact를 사용하세요."
+                    )
+
+                chat_id, title, expected_count = matches[0]
+                member_ids = [
+                    row[0]
+                    for row in chat_connection.execute(
+                        "SELECT userId FROM chatMembers "
+                        "WHERE chatId = ? AND coalesce(isActive, 1) <> 0",
+                        (chat_id,),
+                    )
+                ]
+                users = {
+                    row[0]: (row[1], row[2])
+                    for row in user_connection.execute(
+                        "SELECT userId, "
+                        "coalesce(nullif(friendNickName, ''), nickName, ''), "
+                        "coalesce(phoneNumber, '') FROM talkUser"
+                    )
+                }
+                contacts = []
+                for user_id in member_ids:
+                    name, phone = users.get(user_id, ("", ""))
+                    contacts.append(
+                        {
+                            "name": name or "(이름 확인 불가)",
+                            "phone": phone,
+                        }
+                    )
+                contacts.sort(key=lambda item: item["name"].casefold())
+                cached_count = len(member_ids)
+                return {
+                    "room": title,
+                    "expectedMembers": int(expected_count or 0),
+                    "cachedMembers": cached_count,
+                    "complete": cached_count >= int(expected_count or 0),
+                    "contacts": contacts,
+                }
+            finally:
+                chat_connection.close()
+                user_connection.close()

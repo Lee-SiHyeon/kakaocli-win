@@ -50,6 +50,24 @@ def test_chat_rooms_filter_arguments():
     assert args.include_ids is False
 
 
+def test_export_room_contacts_arguments():
+    args = build_parser().parse_args(
+        [
+            "--json",
+            "export-room-contacts",
+            "동창방",
+            "--output",
+            "contacts.csv",
+            "--exact",
+        ]
+    )
+    assert args.command == "export-room-contacts"
+    assert args.room == "동창방"
+    assert args.output == "contacts.csv"
+    assert args.exact is True
+    assert args.allow_partial is False
+
+
 def make_window(title: str, hwnd: int) -> WindowInfo:
     return WindowInfo(hwnd, title, backend.CHAT_CLASS, 380, 640, True, "chat")
 
